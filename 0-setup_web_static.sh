@@ -1,134 +1,89 @@
 #!/usr/bin/env bash
-# Set up web servers for deployment of web static.
+# duplicate web-01 to web-02
+# these scripts are an upgrade from the web-server scripts...
 
-# Update packages and install nginx if not already installed
-command -v nginx &> /dev/null
-# shellcheck disable=SC2181
-if [ $? -ne 0 ]; then
-    sudo apt update
-    sudo apt install -y nginx
+function install() {
+	command -v "$1" &> /dev/null
+
+	#shellcheck disable=SC2181
+	if [ $? -ne 0 ]; then
+		sudo apt-get update -y -qq && \
+			sudo apt-get install -y "$1" -qq
+		echo -e "\n"
+	fi
+}
+
+install nginx #install nginx
+
+# allowing nginx on firewall
+sudo ufw allow 'Nginx HTTP'
+
+# Give the user ownership to website files for easy editing
+if [ -d "/var/www" ]; then
+	sudo chown -R "$USER":"$USER" /var/www
+	sudo chmod -R 755 /var/www
+else
+	sudo mkdir -p /var/www
+	sudo chown -R "$USER":"$USER" /var/www
+	sudo chmod -R 755 /var/www
 fi
 
-# Make sure HTTP trafic is allowed through firewall
-sudo ufw allow "Nginx HTTP"
-
-# Set up document root while creating a html sub directory.
-docroot="/var/www/botcyba.tech"
-if [ ! -d "$docroot/html" ]; then
-    sudo mkdir -p "$docroot/html"
-    sudo chown -R "$USER":"$USER" "$docroot"
-    chmod 755 -R "$docroot"
+# create directory if not present
+if [ -d "/var/www/html" ]; then
+    cp /var/www/html/index.nginx-debian.html /var/www/html/index.nginx-debian.html.bckp
+else
+    mkdir -p "/var/www/html"
 fi
 
-# Create a basic index.html document
-if [ ! -f "$docroot/html/index.html" ]; then
-    echo -e "Hello World!" > "$docroot/html/index.html"
-fi
+echo "Hello World!" > /var/www/html/index.nginx-debian.html
 
-# Nginx server block config
-conf=\
+# create error page
+echo "Ceci n'est pas une page" > /var/www/html/error_404.html
+
+# backup default server config file
+sudo cp /etc/nginx/sites-enabled/default nginx-sites-enabled_default.backup
+
+server_config=\
 "server {
-\tlisten 80 default_server;
-\tlisten [::]:80 default_server;
-\tserver_name botcyba.tech www.botcyba.tech;
-\troot $docroot;
-\tindex index.html index.htm;
-\tlocation / {
-\t\troot $docroot/html;
-\t\ttry_files \$uri \$uri/ = 404;
-\t}
+		listen 80 default_server;
+		listen [::]:80 default_server;
+		root /var/www/html;
+		index index.html index.htm index.nginx-debian.html
+		server_name_;
+		add_header X-Served-By \$hostname;
+		location / {
+			try_files \$uri \$uri/ =404;
+		}
+		if (\$request_filename ~ redirect_me){
+			rewrite ^ https://youtube.com permanent;
+		}
+		error_page 404 /error_404.html;
+		location = /error_404.html {
+			internal;
+		}
 }"
 
-# Write config to file and enable it if not exist
-if [ ! -f "/etc/nginx/sites-available/botcyba.tech" ]; then
-    echo -e "$conf" | \
-        sudo tee /etc/nginx/sites-available/botcyba.tech > /dev/null
-    sudo ln -s /etc/nginx/sites-available/botcyba.tech /etc/nginx/sites-enabled/
-fi
+#shellcheck disable=SC2154
+echo "$server_config" | sudo dd status=none of=/etc/nginx/sites-available/default
 
-# Make sure the Nginx default site configuration is not enabled.
-if [ -f "/etc/nginx/sites-enabled/default" ]; then
-    sudo rm -f /etc/nginx/sites-enabled/default
-fi
-
-# Implement redirection for a specific request uri using rewrite directive and
-# implement handler for 404 errors in config file.
-# ============================================================================
-
-# Create a 404 error html page
-if [ ! -f "$docroot/html/error_404.html" ]; then
-    echo -e "Ceci n'est pas une page\n" > "$docroot/html/error_404.html"
-fi
-
-# Modify config file using sed to make sure both redirect and error404 are
-# implemented.
-# shellcheck disable=SC1004
-sudo sed -i '
-\|rewrite ^/redirect_me| {n; b err404}
-\|location /|! b
-i\
-\trewrite ^/redirect_me https://youtube.com permanent;
-:err404
-\|error_page 404| b end
-$! {h; n; b err404}
-h
-i\
-\terror_page 404 /error_404.html;
-:end; n; b end
-' /etc/nginx/sites-available/botcyba.tech
-
-# Add a custom header to the config file using sed
-# shellcheck disable=SC1004
-sudo sed -i '
-\|server_name|! b
-n
-\|add_header X-Served-By| b
-i\
-\tadd_header X-Served-By $hostname;
-' /etc/nginx/sites-available/botcyba.tech
-
-# ==================================================================
-# ==================================================================
-
-# Make sure /data/ and sub directories exist
 sudo mkdir -p /data/web_static/{releases/test,shared}
+echo "Holberton School" \
+    | sudo tee /data/web_static/releases/test/index.html > /dev/null
 
-# Make sure an html doc exist in the /data/web_static/releases/test/ directory
-if [ ! -f "/data/web_static/releases/test/index.html" ]; then
-    echo "<html><head></head><body>HBNB Test</body></html>" \
-        | sudo tee /data/web_static/releases/test/index.html > /dev/null
-fi
-
-# Make sure a new symlink is created every time the script is run
 sudo ln -sf /data/web_static/releases/test/ /data/web_static/current
-
-# Give ownership to ubuntu with right permissions.
-sudo chown -R ubuntu:ubuntu /data
-chmod -R 755 /data
-find /data/web_static -type f -exec chmod 754 {} \;
-
-# Modify nginx config to make nginx serve the content of
-# /data/web_static/current for /hbnb_static request path.
-# shellcheck disable=SC1004
+sudo chown -R ubuntu:ubuntu /data/
+#shellcheck disable=SC1004
 sudo sed -i '
 \|location /hbnb_static| b end
-\|error_page 404|! b
+\|location /|! b
 i\
-\tlocation /hbnb_static {\
-\t\talias /data/web_static/current;\
-\t}
+\t\tlocation /hbnb_static {\
+\t\t\talias /data/web_static/current/;\
+\t\t}
 :end; n; b end
-' /etc/nginx/sites-available/botcyba.tech
-
-# Make sure nginx is runnig
-if ! service nginx status &> /dev/null; then
-    sudo service nginx restart
-fi
-
-# Test new nginx config before applying it
-if sudo nginx -t &> /dev/null; then
-    sudo nginx -s reload
+' /etc/nginx/sites-available/default
+if [ "$(pgrep -c nginx)" -le 0 ]; then
+	sudo service nginx start
 else
-    echo "Warning: Bad config! nginx did not load it."
-    exit 1
+	sudo service nginx restart
 fi
