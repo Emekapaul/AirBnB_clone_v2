@@ -12,7 +12,7 @@ from fabric.api import local, run, put, env
 # env.host = ['52.86.157.4', '100.25.14.58']
 # DONE_DO_PACK = False
 # ARCHIVE_PATH = ""
-HOSTS = ['52.86.157.4', '100.25.14.58']
+HOSTS = ['100.25.138.0', '54.237.54.162']
 
 
 def do_pack():

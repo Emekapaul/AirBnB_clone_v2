@@ -4,7 +4,7 @@
 from os import listdir
 from fabric.api import lcd, local, cd, run, env
 
-HOSTS = ['52.86.157.4', '100.25.14.58']
+HOSTS = ['100.25.138.0', '54.237.54.162']
 
 
 def do_clean(number=0):
