@@ -4,7 +4,7 @@
 from os.path import isfile, basename, splitext
 from fabric.api import run, put, env
 
-env.hosts = ['52.86.157.4', '100.25.14.58']
+env.hosts = ['100.25.138.0', '54.237.54.162']
 
 
 def do_deploy(archive_path):
