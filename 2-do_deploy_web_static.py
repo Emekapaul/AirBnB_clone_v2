@@ -22,7 +22,7 @@ def do_deploy(archive_path):
         f'mkdir -p {remote_location}',
         f'tar -xzf /tmp/{archive} -C {remote_location} --strip-components=1',
         f'rm /tmp/{archive}',
-        'rm -rf /data/web_static/current'
+        'rm -rf /data/web_static/current',
         f'ln -s {remote_location}/ /data/web_static/current'
     ]
 
